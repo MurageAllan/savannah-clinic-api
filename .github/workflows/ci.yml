@@ -57,3 +57,68 @@ jobs:
 
       - name: Run automated tests
         run: python -m pytest tests/ -v
+
+  deploy:
+    name: Deploy to Contabo VPS
+    runs-on: ubuntu-latest
+    needs: test
+
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Configure deployment SSH
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/savannah_clinic_deploy
+          chmod 600 ~/.ssh/savannah_clinic_deploy
+
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy FastAPI application
+        run: |
+          ssh \
+            -i ~/.ssh/savannah_clinic_deploy \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            savannah@217.76.55.48 'bash -se' <<'REMOTE'
+
+          set -euo pipefail
+
+          cd /opt/savannah-clinic-api
+
+          echo "Retrieving latest code..."
+          git fetch origin main
+          git merge --ff-only origin/main
+
+          echo "Installing Python dependencies..."
+          .venv/bin/python -m pip install -r requirements.txt
+
+          echo "Applying database migrations..."
+          DB_NAME=savannah_clinic .venv/bin/python -m alembic upgrade head
+
+          echo "Restarting Savannah Clinic API..."
+          sudo -n /usr/bin/systemctl restart savannah-clinic.service
+
+          echo "Checking application health..."
+          curl --fail --silent --show-error \
+            --retry 5 \
+            --retry-delay 2 \
+            --retry-connrefused \
+            http://127.0.0.1:8090/health
+
+          echo
+          echo "Deployment completed successfully."
+
+          REMOTE
+
+      - name: Verify public HTTPS endpoint
+        run: |
+          curl --fail --silent --show-error \
+            https://clinic.kashflowsacco.co.ke/health
+
