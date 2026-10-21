@@ -1,0 +1,59 @@
+
+name: Savannah Clinic API - CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    name: Run Automated Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+
+        env:
+          POSTGRES_DB: savannah_clinic_test
+          POSTGRES_USER: savannah_user
+          POSTGRES_PASSWORD: test_password
+
+        ports:
+          - 5432:5432
+
+        options: >-
+          --health-cmd "pg_isready -U savannah_user -d savannah_clinic_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_NAME: savannah_clinic_test
+      DB_USER: savannah_user
+      DB_PASSWORD: test_password
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Apply database migrations
+        run: python -m alembic upgrade head
+
+      - name: Run automated tests
+        run: python -m pytest tests/ -v
