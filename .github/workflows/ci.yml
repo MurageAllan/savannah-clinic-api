@@ -77,6 +77,9 @@ jobs:
           printf '%s\n' "$SSH_KEY" > ~/.ssh/savannah_clinic_deploy
           chmod 600 ~/.ssh/savannah_clinic_deploy
 
+          ssh-keygen -y -P "" -f ~/.ssh/savannah_clinic_deploy > /dev/null
+          echo "Deployment private key is valid"
+
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
